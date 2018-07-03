@@ -28,7 +28,7 @@ verbose = false
 force = false
 
 ARGV.options do |opts|
-  opts.banner = "\nUsage: #{$PROGRAM_NAME} [OPTIONS]\n\nCreate a multi-thumbnail image of a video file\n\n"
+  opts.banner = "\nUsage: #{File.basename $PROGRAM_NAME} [OPTIONS]\n\nCreate a multi-thumbnail image of a video file\n\n"
 
   opts.on('-h', '--help', 'show this message') do
     puts opts
