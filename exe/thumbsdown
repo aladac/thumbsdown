@@ -65,7 +65,7 @@ if File.exist?(output) && !defined? force
 end
 
 if File.exist?(output) && defined? force
-  puts 'Output file already exists: deleting' if defined? verbose
+  puts 'Output file already exists: deleting' if verbose
   File.unlink(output)
 end
 
@@ -79,7 +79,7 @@ unless File.writable?(temp)
   exit
 end
 
-puts "Temp directory: #{temp} - exists and is writable" if defined? verbose
+puts "Temp directory: #{temp} - exists and is writable" if verbose
 
 id = {}
 
@@ -96,7 +96,7 @@ step = (id['ID_LENGTH'].to_i / thumbs).to_i
   break if thumb_time > id['ID_LENGTH'].to_i
   `#{thumb_cmd} -ss #{thumb_time}`
   index = format('%.8d', i)
-  if defined? verbose
+  if verbose
     tt = format('%.8d', thumb_time)
     puts "Dumping [Time: #{tt}] #{temp}/screen-#{index}.png"
   end
@@ -128,7 +128,7 @@ end
 
 cmd += " -append #{temp}/tmp.png"
 
-if defined? verbose
+if verbose
   puts "Joining thumbs to: #{output}"
   puts 'Executing: ' + cmd
 end
@@ -136,15 +136,15 @@ end
 `#{cmd}`
 
 Dir.new(temp).grep(/screen-.*png/).each do |file|
-  puts "Deleting #{temp}/#{file}" if defined? verbose
+  puts "Deleting #{temp}/#{file}" if verbose
   File.unlink("#{temp}/#{file}")
 end
 
 `convert -gravity center -background white #{temp}/header.png #{temp}/tmp.png -append #{output}`
 
-puts "Deleting #{temp}/tmp.png" if defined? verbose
+puts "Deleting #{temp}/tmp.png" if verbose
 File.unlink("#{temp}/tmp.png")
-puts "Deleting #{temp}/header.png" if defined? verbose
+puts "Deleting #{temp}/header.png" if verbose
 File.unlink("#{temp}/header.png")
 
-puts 'DONE.' if defined? verbose
+puts 'DONE.' if verbose
