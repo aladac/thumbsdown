@@ -1,0 +1,150 @@
+#!/usr/bin/env ruby
+
+# check for stuff we need to make this work:
+# - imagemagick
+# - mplayer
+
+used_binaries = %w[convert mogrify mplayer]
+
+used_binaries.each do |file|
+  if `which #{file}` == ''
+    puts "Error: missing #{file}"
+    exit
+  end
+end
+
+require 'optparse'
+require 'fileutils'
+require 'pp'
+
+start = 1
+thumbs = 20
+columns = 5
+output = 'thumbs.png'
+temp = '/tmp'
+width = 320
+verbose = false
+force = false
+
+ARGV.options do |opts|
+  opts.banner = "\nUsage: #{$PROGRAM_NAME} [OPTIONS]\n\nCreate a multi-thumbnail image of a video file\n\n"
+
+  opts.on('-h', '--help', 'show this message') do
+    puts opts
+    exit
+  end
+  opts.on('-v', '--[no-]verbose=[FLAG]', TrueClass, 'run verbosly') { |v| verbose = v }
+  opts.on('-o', '--output=STRING', String, 'Output filename (default out.(png|jpeg))') { |o| output = o }
+  opts.on('-c', '--columns=INT', Integer, 'Number of thumbnail columns (default: 5)') { |c| columns = c }
+  opts.on('-s', '--start=INT', Integer, 'Start point for making thumbnails in seconds (default: 1)') { |s| start = s }
+  opts.on('-T', '--temp=STRING', String, 'Specify a temporary directory (default /tmp)') { |t| temp = t }
+  opts.on('-t', '--thumbs=INT', Integer, 'Number of thumbs to generate - the length of the video is divided equally by this (default: 20)') { |th| thumbs = th }
+  opts.on('-w', '--width=INT', Integer, 'Width of a single thumbnail - Height calculated automaticly (default: 320px)') { |w| width = w }
+  opts.on('-f', '--[no-]force=[FLAG]', TrueClass, 'force mode - override output') { |f| force = f }
+  opts.parse!
+end
+
+if ARGV.empty?
+  puts ARGV.options
+  exit
+end
+
+identify_args = '-frames 1 -nosound -vo null -identify '
+identify_cmd = 'mplayer -nolirc ' + identify_args + '"' + ARGV[0] + '"'
+thumb_args = '-osdlevel 2 -vo png -nosound -frames 1 -vf expand=-1:-1:-1:-1:1 '
+thumb_cmd = 'mplayer -nolirc ' + thumb_args + '"' + ARGV[0] + '"'
+
+unless File.exist?(ARGV[0])
+  puts 'Input video file does not exits'
+  exit
+end
+
+if File.exist?(output) && !defined? force
+  puts 'Output file already exists: use -f to override'
+  exit
+end
+
+if File.exist?(output) && defined? force
+  puts 'Output file already exists: deleting' if defined? verbose
+  File.unlink(output)
+end
+
+unless File.directory?(temp)
+  puts 'Temp directory does not exists'
+  exit
+end
+
+unless File.writable?(temp)
+  puts 'Temp directory is not writable'
+  exit
+end
+
+puts "Temp directory: #{temp} - exists and is writable" if defined? verbose
+
+id = {}
+
+`#{identify_cmd}`.split("\n").grep(/^ID/).each do |line|
+  key = line.chomp.split('=')[0]
+  value = line.chomp.split('=')[1]
+  id[key] = value
+end
+
+step = (id['ID_LENGTH'].to_i / thumbs).to_i
+
+1.upto(thumbs) do |i|
+  thumb_time = i * step
+  break if thumb_time > id['ID_LENGTH'].to_i
+  `#{thumb_cmd} -ss #{thumb_time}`
+  index = format('%.8d', i)
+  if defined? verbose
+    tt = format('%.8d', thumb_time)
+    puts "Dumping [Time: #{tt}] #{temp}/screen-#{index}.png"
+  end
+  FileUtils.move '00000001.png', "#{temp}/screen-#{index}.png"
+  `mogrify -border 10 -sample #{width}x #{temp}/screen-#{index}.png`
+end
+
+header = File.basename(id['ID_FILENAME']) + "\nvcodec: " + id['ID_VIDEO_FORMAT'] + ', fps: ' + id['ID_VIDEO_FPS'] + ', resolution: ' + id['ID_VIDEO_WIDTH'] + 'x' + id['ID_VIDEO_HEIGHT'] + "\n"
+
+`echo "#{header}" | convert -background  none -pointsize 18 text:- -trim +repage -flatten #{temp}/header.png`
+
+thumbs = Dir.new(temp).grep(/screen/).sort
+
+len = thumbs.length
+
+col = 0
+row = ''
+cmd = 'convert'
+
+len.times do |idx|
+  row = row + ' ' + temp + '/' + thumbs[idx]
+  col += 1
+  next unless col == columns || idx + 1 == len
+  row += ' +append'
+  col = 0
+  cmd += ' \\(' + row + ' \\)'
+  row = ''
+end
+
+cmd += " -append #{temp}/tmp.png"
+
+if defined? verbose
+  puts "Joining thumbs to: #{output}"
+  puts 'Executing: ' + cmd
+end
+
+`#{cmd}`
+
+Dir.new(temp).grep(/screen-.*png/).each do |file|
+  puts "Deleting #{temp}/#{file}" if defined? verbose
+  File.unlink("#{temp}/#{file}")
+end
+
+`convert -gravity center -background white #{temp}/header.png #{temp}/tmp.png -append #{output}`
+
+puts "Deleting #{temp}/tmp.png" if defined? verbose
+File.unlink("#{temp}/tmp.png")
+puts "Deleting #{temp}/header.png" if defined? verbose
+File.unlink("#{temp}/header.png")
+
+puts 'DONE.' if defined? verbose
