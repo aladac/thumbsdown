@@ -2,11 +2,13 @@ PATH
   remote: .
   specs:
     thumbsdown (0.1.0)
+      tqdm
 
 GEM
   remote: https://rubygems.org/
   specs:
     rake (10.5.0)
+    tqdm (0.3.0)
 
 PLATFORMS
   ruby

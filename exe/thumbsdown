@@ -16,6 +16,7 @@ end
 require 'optparse'
 require 'fileutils'
 require 'pp'
+require 'tqdm'
 
 start = 1
 thumbs = 20
@@ -50,9 +51,9 @@ if ARGV.empty?
 end
 
 identify_args = '-frames 1 -nosound -vo null -identify '
-identify_cmd = 'mplayer -nolirc ' + identify_args + '"' + ARGV[0] + '"'
+identify_cmd = 'mplayer -nolirc ' + identify_args + '"' + ARGV[0] + '" 2> /dev/null'
 thumb_args = '-osdlevel 2 -vo png -nosound -frames 1 -vf expand=-1:-1:-1:-1:1 '
-thumb_cmd = 'mplayer -nolirc ' + thumb_args + '"' + ARGV[0] + '"'
+thumb_cmd = 'mplayer -nolirc ' + thumb_args + '"' + ARGV[0] + '" 2> /dev/null'
 
 unless File.exist?(ARGV[0])
   puts 'Input video file does not exits'
@@ -91,7 +92,7 @@ end
 
 step = (id['ID_LENGTH'].to_i / thumbs).to_i
 
-1.upto(thumbs) do |i|
+1.upto(thumbs).tqdm.each do |i|
   thumb_time = i * step
   break if thumb_time > id['ID_LENGTH'].to_i
   `#{thumb_cmd} -ss #{thumb_time}`
