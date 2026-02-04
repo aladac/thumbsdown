@@ -1,6 +1,6 @@
 [package]
 name = "thumbsdown"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Adam Ladachowski <adam.ladachowski@gmail.com>"]
 description = "Generate thumbnail grids from video files"
