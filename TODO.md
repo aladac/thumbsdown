@@ -55,9 +55,9 @@ tests/
 ### Phase 5: Cleanup
 - [x] Remove Ruby files: `exe/`, `Gemfile`, `Gemfile.lock`, `Rakefile`, `thumbsdown.gemspec`
 - [x] Remove `.github/workflows/publish-ghpkg.yml`
-- [ ] Update README.md for Rust CLI
-- [ ] Add CI workflow (fmt/clippy/test)
-- [ ] Add release workflow (cross-platform binaries)
+- [x] Update README.md for Rust CLI
+- [x] Add CI workflow (fmt/clippy/test)
+- [x] Add release workflow (cross-platform binaries)
 
 ## CLI (preserved from Ruby)
 
