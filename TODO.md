@@ -1,117 +1,101 @@
-# Thumbsdown - Update for 2025
+# Thumbsdown: Rust Rewrite
 
-Video thumbnail grid generator - needs modernization from mplayer to ffmpeg/mpv.
+Rewrite the Ruby gem (single 152-line script) as a Rust CLI. Replace mplayer with ffmpeg/ffprobe. Replace ImageMagick with pure-Rust image processing. Result: single binary with only ffmpeg as runtime dependency.
 
-## Current State
+## Dependencies
 
-- **Language**: Ruby gem
-- **Dependencies**: mplayer (deprecated), ImageMagick
-- **Last updated**: 2018
+| Crate | Purpose | Replaces |
+|---|---|---|
+| `clap` (derive) | CLI args | Ruby `optparse` |
+| `thiserror` | Error types | `puts`+`exit` |
+| `serde` + `serde_json` | Parse ffprobe JSON | Regex on mplayer `ID_*` lines |
+| `image` | Resize, buffers, save PNG | ImageMagick `mogrify`/`convert` |
+| `imageproc` + `ab_glyph` | Header text rendering | ImageMagick `convert text:-` |
+| `indicatif` | Progress bar | Ruby `tqdm` |
+| `tempfile` | Auto-cleanup temp dir | Manual `/tmp` management |
+| `assert_cmd` + `predicates` | Integration tests | (new) |
 
-## Problem
+## File Structure
 
-mplayer is legacy/unmaintained. Modern alternatives:
-1. **ffmpeg** - Universal, widely available, best choice
-2. **mpv** - Modern mplayer fork, similar syntax
-3. **libav/avconv** - Less common now
-
-## Current mplayer Usage
-
-### Metadata extraction
-```bash
-mplayer -nolirc -frames 1 -nosound -vo null -identify "video.mp4"
-# Outputs: ID_LENGTH, ID_VIDEO_FORMAT, ID_VIDEO_FPS, ID_VIDEO_WIDTH, ID_VIDEO_HEIGHT
+```
+src/
+  main.rs     ~60 lines  - entry point, orchestration pipeline
+  cli.rs      ~80 lines  - clap Args struct + validate()
+  error.rs    ~50 lines  - ThumbsdownError enum (thiserror)
+  video.rs    ~120 lines - ffprobe metadata, ffmpeg frame capture
+  grid.rs     ~150 lines - resize, border, grid composition
+  header.rs   ~80 lines  - text rendering with embedded DejaVu Sans font
+fonts/
+  DejaVuSans.ttf          - embedded at compile time via include_bytes!
+tests/
+  integration.rs          - CLI integration tests (assert_cmd)
 ```
 
-### Frame capture
-```bash
-mplayer -nolirc -osdlevel 2 -vo png -nosound -frames 1 -vf expand -ss <seconds> "video.mp4"
+## Implementation Tasks
+
+### Phase 1: Scaffold
+- [x] `cargo init`, Cargo.toml with all dependencies
+- [x] Download DejaVu Sans font to `fonts/`
+- [x] Update `.gitignore` for Rust (`/target`)
+
+### Phase 2: Core Modules
+- [x] `error.rs` - `ThumbsdownError` enum with variants for all failure modes
+- [x] `cli.rs` - clap `Args` struct preserving all original flags, `validate()` fn
+- [x] `video.rs` - `check_dependencies()`, `probe()` (ffprobe JSON), `capture_frame()` (ffmpeg)
+- [x] `grid.rs` - `process_thumbnail()`, `add_border()`, `compose_grid()`, `assemble_final()`
+- [x] `header.rs` - `render_header()` with embedded font, 2-line text (filename + metadata)
+
+### Phase 3: Wire Up
+- [x] `main.rs` - Pipeline: parse -> validate -> probe -> capture -> grid -> header -> save
+
+### Phase 4: Tests
+- [x] Unit tests in each module (`#[cfg(test)]`) - 25 tests
+- [x] Integration tests with `assert_cmd` (--help, --version, missing file, etc.) - 5 tests
+
+### Phase 5: Cleanup
+- [x] Remove Ruby files: `exe/`, `Gemfile`, `Gemfile.lock`, `Rakefile`, `thumbsdown.gemspec`
+- [x] Remove `.github/workflows/publish-ghpkg.yml`
+- [ ] Update README.md for Rust CLI
+- [ ] Add CI workflow (fmt/clippy/test)
+- [ ] Add release workflow (cross-platform binaries)
+
+## CLI (preserved from Ruby)
+
+```
+thumbsdown [OPTIONS] <VIDEO>
+
+Options:
+  -s, --start <N>      Start time in seconds [default: 1]
+  -t, --thumbs <N>     Number of thumbnails [default: 20]
+  -c, --columns <N>    Grid columns [default: 5]
+  -o, --output <PATH>  Output file [default: thumbs.png]
+  -T, --temp <DIR>     Temp directory [default: OS temp]
+  -w, --width <N>      Thumbnail width in pixels [default: 320]
+  -v, --verbose        Verbose output
+  -f, --force          Overwrite existing output
+  -V, --version        Version
+  -h, --help           Help
 ```
 
-## Replacement Commands
+## Pipeline
 
-### ffmpeg (recommended)
-```bash
-# Metadata
-ffprobe -v quiet -print_format json -show_format -show_streams "video.mp4"
-
-# Frame capture at specific time
-ffmpeg -ss <seconds> -i "video.mp4" -frames:v 1 -q:v 2 output.png
+```
+parse args -> validate -> check ffmpeg/ffprobe on PATH
+  -> ffprobe video -> VideoInfo { duration, width, height, codec, fps }
+  -> for each thumbnail:
+       ffmpeg -ss T -i video -frames:v 1 frame.png
+       load frame, add 10px white border, resize to --width
+  -> compose_grid: chunks by columns, concat_horizontal per row, concat_vertical
+  -> render_header: 2-line text (filename + codec/fps/resolution) with embedded font
+  -> assemble_final: header on top of grid, white background
+  -> save output PNG
+  -> TempDir auto-drops (cleanup)
 ```
 
-### mpv
-```bash
-# Metadata
-mpv --vo=null --ao=null --frames=1 --term-playing-msg='LENGTH=${duration}
-WIDTH=${width}
-HEIGHT=${height}' "video.mp4"
+## Key Improvements Over Ruby
 
-# Frame capture
-mpv --vo=image --start=<seconds> --frames=1 "video.mp4"
-```
-
-## Tasks
-
-### Phase 1: Backend Switch
-- [ ] Replace mplayer metadata extraction with ffprobe
-- [ ] Replace mplayer frame capture with ffmpeg
-- [ ] Update dependency check (`which ffmpeg ffprobe convert mogrify`)
-- [ ] Parse ffprobe JSON output instead of mplayer ID_ lines
-
-### Phase 2: Modernize Ruby
-- [ ] Update to modern Ruby (3.x compatible)
-- [ ] Replace `tqdm` with native progress or `ruby-progressbar`
-- [ ] Update bundler/rake dependencies
-- [ ] Add proper error handling
-- [ ] Use shellwords for safe command building
-
-### Phase 3: Features
-- [ ] Add `--backend` flag to choose ffmpeg/mpv
-- [ ] Add timestamp overlay on thumbnails
-- [ ] Add video info header (duration, codec, resolution)
-- [ ] Support output formats: PNG, JPEG, WebP
-- [ ] Add `--quality` option for output compression
-
-### Phase 4: Distribution
-- [ ] Update gemspec for modern RubyGems
-- [ ] Add GitHub Actions CI
-- [ ] Publish to RubyGems.org
-- [ ] Add Homebrew formula
-
-## Code Changes Required
-
-### exe/thumbsdown
-
-```ruby
-# OLD
-used_binaries = %w[convert mogrify mplayer]
-identify_cmd = 'mplayer -nolirc -frames 1 -nosound -vo null -identify'
-thumb_cmd = 'mplayer -nolirc -osdlevel 2 -vo png -nosound -frames 1'
-
-# NEW
-used_binaries = %w[convert mogrify ffmpeg ffprobe]
-
-def get_video_info(file)
-  json = `ffprobe -v quiet -print_format json -show_format -show_streams "#{file}"`
-  data = JSON.parse(json)
-  video = data['streams'].find { |s| s['codec_type'] == 'video' }
-  {
-    duration: data['format']['duration'].to_f,
-    width: video['width'],
-    height: video['height'],
-    codec: video['codec_name'],
-    fps: eval(video['r_frame_rate']).to_f.round(2)
-  }
-end
-
-def capture_frame(file, time, output)
-  `ffmpeg -y -ss #{time} -i "#{file}" -frames:v 1 -q:v 2 "#{output}" 2>/dev/null`
-end
-```
-
-## Alternative: Rewrite in Rust
-
-Consider rewriting as a Rust CLI for:
-- Single binary distribution (no Ruby/gem needed)
-- Better performance for large batches
-- Use `ffmpeg` crate or shell out to ffmpeg
+- **Single binary** - no Ruby, no ImageMagick, only ffmpeg needed
+- **Auto temp cleanup** - `tempfile::TempDir` drops on exit/panic
+- **Fast seeking** - ffmpeg `-ss` before `-i` (input seeking)
+- **f64 time math** - accurate frame spacing (Ruby used integer division)
+- **In-memory grid** - no intermediate disk files for composition

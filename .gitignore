@@ -1,2 +1,4 @@
-.rubocop.yml
-pkg
+/target
+*.swp
+*.swo
+*~
