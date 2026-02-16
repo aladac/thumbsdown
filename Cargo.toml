@@ -29,3 +29,13 @@ predicates = "3"
 strip = true
 lto = true
 codegen-units = 1
+
+[package.metadata.deb]
+maintainer = "Adam Ladachowski <chi@sazabi.pl>"
+copyright = "2025, Adam Ladachowski"
+extended-description = "Generate thumbnail grids from video files using ffmpeg."
+section = "utility"
+priority = "optional"
+assets = [
+    ["target/release/thumbsdown", "usr/bin/", "755"]
+]
