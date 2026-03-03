@@ -13,6 +13,12 @@ pub enum ThumbsdownError {
     #[error("temp directory does not exist: {0}")]
     TempDirNotFound(PathBuf),
 
+    #[error("keep-frames directory does not exist: {0}")]
+    KeepFramesDirNotFound(PathBuf),
+
+    #[error("--no-grid requires --keep-frames (otherwise nothing is produced)")]
+    NoGridWithoutKeepFrames,
+
     #[error("ffprobe not found on PATH (install ffmpeg)")]
     FfprobeNotFound,
 

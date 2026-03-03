@@ -69,6 +69,14 @@ fn run() -> Result<()> {
         let thumb = grid::process_thumbnail(&frame_path, args.width, 10)?;
         thumbnails.push(thumb);
 
+        if let Some(ref keep_dir) = args.keep_frames {
+            let dest = keep_dir.join(format!("frame-{i:04}.png"));
+            std::fs::copy(&frame_path, &dest)?;
+            if args.verbose {
+                eprintln!("Saved frame to {}", dest.display());
+            }
+        }
+
         if args.verbose {
             eprintln!("Captured frame at {time:.1}s -> {}", frame_path.display());
         }
@@ -76,14 +84,19 @@ fn run() -> Result<()> {
     }
     pb.finish_and_clear();
 
-    let grid_image = grid::compose_grid(&thumbnails, args.columns);
-    let header_image = header::render_header(&info)?;
-    let final_image = grid::assemble_final(&header_image, &grid_image);
+    if !args.no_grid {
+        let grid_image = grid::compose_grid(&thumbnails, args.columns);
+        let header_image = header::render_header(&info)?;
+        let final_image = grid::assemble_final(&header_image, &grid_image);
 
-    final_image.save(&args.output)?;
+        final_image.save(&args.output)?;
+
+        if args.verbose {
+            eprintln!("Saved to {}", args.output.display());
+        }
+    }
 
     if args.verbose {
-        eprintln!("Saved to {}", args.output.display());
         eprintln!("DONE.");
     }
 

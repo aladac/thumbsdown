@@ -42,6 +42,14 @@ pub struct Args {
     /// Overwrite existing output file
     #[arg(short = 'f', long)]
     pub force: bool,
+
+    /// Keep extracted frames in specified directory
+    #[arg(short = 'k', long)]
+    pub keep_frames: Option<PathBuf>,
+
+    /// Skip grid generation (only extract frames, requires --keep-frames)
+    #[arg(long)]
+    pub no_grid: bool,
 }
 
 pub fn validate(args: &Args) -> Result<()> {
@@ -57,6 +65,16 @@ pub fn validate(args: &Args) -> Result<()> {
         if !temp.is_dir() {
             return Err(ThumbsdownError::TempDirNotFound(temp.clone()));
         }
+    }
+
+    if let Some(ref keep_dir) = args.keep_frames {
+        if !keep_dir.is_dir() {
+            return Err(ThumbsdownError::KeepFramesDirNotFound(keep_dir.clone()));
+        }
+    }
+
+    if args.no_grid && args.keep_frames.is_none() {
+        return Err(ThumbsdownError::NoGridWithoutKeepFrames);
     }
 
     Ok(())
@@ -78,6 +96,8 @@ mod tests {
             width: 320,
             verbose: false,
             force: false,
+            keep_frames: None,
+            no_grid: false,
         };
         let err = validate(&args).unwrap_err();
         assert!(err.to_string().contains("does not exist"));
@@ -101,6 +121,8 @@ mod tests {
             width: 320,
             verbose: false,
             force: false,
+            keep_frames: None,
+            no_grid: false,
         };
         let err = validate(&args).unwrap_err();
         assert!(err.to_string().contains("already exists"));
@@ -124,6 +146,8 @@ mod tests {
             width: 320,
             verbose: false,
             force: true,
+            keep_frames: None,
+            no_grid: false,
         };
         assert!(validate(&args).is_ok());
     }
@@ -144,8 +168,79 @@ mod tests {
             width: 320,
             verbose: false,
             force: false,
+            keep_frames: None,
+            no_grid: false,
         };
         let err = validate(&args).unwrap_err();
         assert!(err.to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn validate_rejects_nonexistent_keep_frames_dir() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let video = dir.path().join("video.mp4");
+        std::fs::write(&video, b"fake").expect("write");
+
+        let args = Args {
+            video,
+            start: 1,
+            thumbs: 20,
+            columns: 5,
+            output: PathBuf::from("out.png"),
+            temp: None,
+            width: 320,
+            verbose: false,
+            force: false,
+            keep_frames: Some(PathBuf::from("/nonexistent_dir_xyz")),
+            no_grid: false,
+        };
+        let err = validate(&args).unwrap_err();
+        assert!(err.to_string().contains("keep-frames"));
+    }
+
+    #[test]
+    fn validate_rejects_no_grid_without_keep_frames() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let video = dir.path().join("video.mp4");
+        std::fs::write(&video, b"fake").expect("write");
+
+        let args = Args {
+            video,
+            start: 1,
+            thumbs: 20,
+            columns: 5,
+            output: PathBuf::from("out.png"),
+            temp: None,
+            width: 320,
+            verbose: false,
+            force: false,
+            keep_frames: None,
+            no_grid: true,
+        };
+        let err = validate(&args).unwrap_err();
+        assert!(err.to_string().contains("--no-grid"));
+        assert!(err.to_string().contains("--keep-frames"));
+    }
+
+    #[test]
+    fn validate_allows_no_grid_with_keep_frames() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let video = dir.path().join("video.mp4");
+        std::fs::write(&video, b"fake").expect("write");
+
+        let args = Args {
+            video,
+            start: 1,
+            thumbs: 20,
+            columns: 5,
+            output: PathBuf::from("out.png"),
+            temp: None,
+            width: 320,
+            verbose: false,
+            force: false,
+            keep_frames: Some(dir.path().to_path_buf()),
+            no_grid: true,
+        };
+        assert!(validate(&args).is_ok());
     }
 }
