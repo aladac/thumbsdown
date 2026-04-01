@@ -1,88 +1,86 @@
-#!/bin/bash
-set -e
+#!/bin/sh
+set -eu
 
 REPO="aladac/thumbsdown"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
-BINARY_NAME="thumbsdown"
-
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-info() { echo -e "${GREEN}==>${NC} $1"; }
-warn() { echo -e "${YELLOW}==>${NC} $1"; }
-error() { echo -e "${RED}Error:${NC} $1"; exit 1; }
-
-# Detect platform
-detect_platform() {
-    local os arch
-
-    case "$(uname -s)" in
-        Linux*)  os="linux" ;;
-        Darwin*) os="macos" ;;
-        *)       error "Unsupported OS: $(uname -s)" ;;
-    esac
-
-    case "$(uname -m)" in
-        x86_64|amd64)  arch="amd64" ;;
-        aarch64|arm64) arch="arm64" ;;
-        *)             error "Unsupported architecture: $(uname -m)" ;;
-    esac
-
-    # macOS Intel not supported
-    if [[ "$os" == "macos" && "$arch" == "amd64" ]]; then
-        error "macOS Intel (x86_64) is not supported. Use 'cargo install thumbsdown' instead."
-    fi
-
-    echo "${os}-${arch}"
-}
-
-# Get latest release tag
-get_latest_version() {
-    curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4
-}
+INSTALL_DIR="${THUMBSDOWN_INSTALL_DIR:-/usr/local/bin}"
 
 main() {
-    info "Detecting platform..."
-    local platform=$(detect_platform)
-    info "Platform: $platform"
+  need_cmd curl
+  need_cmd uname
 
-    info "Fetching latest version..."
-    local version=$(get_latest_version)
-    [[ -z "$version" ]] && error "Failed to fetch latest version"
-    info "Version: $version"
+  os=$(detect_os)
+  arch=$(detect_arch)
+  asset=$(asset_name "$os" "$arch")
 
-    local asset="thumbsdown-${platform}"
-    local url="https://github.com/${REPO}/releases/download/${version}/${asset}"
+  if [ -z "$asset" ]; then
+    err "unsupported platform: ${os}/${arch}"
+  fi
 
-    info "Downloading ${asset}..."
-    mkdir -p "$INSTALL_DIR"
+  version=$(latest_version)
+  url="https://github.com/${REPO}/releases/download/${version}/${asset}"
 
-    if ! curl -sL "$url" -o "${INSTALL_DIR}/${BINARY_NAME}"; then
-        error "Failed to download from $url"
-    fi
+  printf "Installing thumbsdown %s (%s/%s)\n" "$version" "$os" "$arch"
+  printf "  from: %s\n" "$url"
+  printf "  to:   %s/thumbsdown\n" "$INSTALL_DIR"
 
-    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-    info "Installed to ${INSTALL_DIR}/${BINARY_NAME}"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
 
-    # Check if INSTALL_DIR is in PATH
-    if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then
-        warn "${INSTALL_DIR} is not in your PATH"
-        echo ""
-        echo "Add it to your shell profile:"
-        echo ""
-        echo "  # For bash (~/.bashrc or ~/.bash_profile)"
-        echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-        echo ""
-        echo "  # For zsh (~/.zshrc)"
-        echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-        echo ""
-        echo "Then restart your shell or run: source ~/.bashrc"
-    else
-        info "Run 'thumbsdown --help' to get started"
-    fi
+  curl -fsSL "$url" -o "${tmp}/thumbsdown"
+  chmod +x "${tmp}/thumbsdown"
+
+  if [ -w "$INSTALL_DIR" ]; then
+    mv "${tmp}/thumbsdown" "${INSTALL_DIR}/thumbsdown"
+  else
+    printf "\nElevated permissions required to install to %s\n" "$INSTALL_DIR"
+    sudo mv "${tmp}/thumbsdown" "${INSTALL_DIR}/thumbsdown"
+  fi
+
+  printf "\nthumbsdown %s installed successfully.\n" "$version"
+  printf "Run 'thumbsdown --help' to get started.\n"
+}
+
+detect_os() {
+  case "$(uname -s)" in
+    Linux*)  echo "linux" ;;
+    Darwin*) echo "macos" ;;
+    *)       err "unsupported OS: $(uname -s)" ;;
+  esac
+}
+
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64)  echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *)             err "unsupported architecture: $(uname -m)" ;;
+  esac
+}
+
+asset_name() {
+  case "${1}-${2}" in
+    macos-arm64)  echo "thumbsdown-macos-arm64" ;;
+    linux-amd64)  echo "thumbsdown-linux-amd64" ;;
+    linux-arm64)  echo "thumbsdown-linux-arm64" ;;
+    *)            echo "" ;;
+  esac
+}
+
+latest_version() {
+  curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+    | grep '"tag_name"' \
+    | head -1 \
+    | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/'
+}
+
+need_cmd() {
+  if ! command -v "$1" > /dev/null 2>&1; then
+    err "required command not found: $1"
+  fi
+}
+
+err() {
+  printf "error: %s\n" "$1" >&2
+  exit 1
 }
 
 main
