@@ -10,6 +10,12 @@ Generate thumbnail grids from video files.
 
 ## Installation
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install saiden-dev/tap/thumbsdown
+```
+
 ### Quick install (Linux/macOS)
 
 ```bash
